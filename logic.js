@@ -21,12 +21,10 @@ function calculateSimilarities(data) {
         artistsByCountry.forEach((artists2, country2) => {
             if (country1 !== country2) {
                 const artists2List = artists2.map(d => d.Artist);
-                // Find the shared artists
                 const sharedArtistsList = artists1List.filter(artist => 
                     artists2List.includes(artist)
                 );
                 
-                // Calculate the percentage of shared artists
                 const minArtists = Math.min(artists1List.length, artists2List.length);
                 similarities[country1][country2] = {
                     score: sharedArtistsList.length / minArtists,
@@ -42,38 +40,6 @@ function calculateSimilarities(data) {
     return similarities;
 }
 
-// Load the country data and artist data
-Promise.all([
-    d3.json('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'),
-    d3.csv('https://raw.githubusercontent.com/manuelanzali/Project-3/refs/heads/main/Resources/top_artists_by_country.csv')
-]).then(([worldData, artistData]) => {
-    // Process the artist data to calculate similarities
-    const countries = [...new Set(artistData.map(d => d.Country))].sort();
-
-    // Populate the dropdown with converted country names
-    const select = document.getElementById('countrySelect');
-    countries.forEach(countryCode => {
-        const option = document.createElement('option');
-        option.value = countryCode;
-        option.textContent = convertCountryCode(countryCode);
-        select.appendChild(option);
-    });
-
-    const similarities = calculateSimilarities(artistData);
-
-    // Update the map when a country is selected
-    select.addEventListener('change', (event) => {
-        const selectedCountry = event.target.value;
-        updateChoropleth(worldData, similarities[selectedCountry]);
-    });
-
-    // Trigger initial selection
-    if (countries.length > 0) {
-        select.value = countries[0];
-        select.dispatchEvent(new Event('change'));
-    }
-});
-
 function updateChoropleth(worldData, similarityScores) {
     if (choroplethLayer) {
         map.removeLayer(choroplethLayer);
@@ -81,17 +47,16 @@ function updateChoropleth(worldData, similarityScores) {
 
     choroplethLayer = L.geoJSON(worldData, {
         style: feature => {
-            // Check if this is the selected country
             const isSelected = feature.properties.ISO_A2 === selectedCountry;
             
             return {
-                fillColor: isSelected ? '#2ECC71' : // Highlight color for selected country
+                fillColor: isSelected ? '#2ECC71' : 
                           getColor((similarityScores[feature.properties.ISO_A2]?.score || 0)),
-                weight: isSelected ? 3 : 1, // Thicker border for selected country
+                weight: isSelected ? 3 : 1,
                 opacity: 1,
-                color: isSelected ? '#27AE60' : 'white', // Different border color for selected
+                color: isSelected ? '#27AE60' : 'white',
                 fillOpacity: isSelected ? 0.8 : 0.7,
-                dashArray: isSelected ? '3' : null // Optional: adds dashed border to selected
+                dashArray: isSelected ? '3' : null
             };
         },
         onEachFeature: (feature, layer) => {
@@ -101,12 +66,10 @@ function updateChoropleth(worldData, similarityScores) {
                 const percentage = (countryData.score * 100).toFixed(0);
                 const countryName = convertCountryCode(feature.properties.ISO_A2);
                 
-                // Create a formatted list of shared artists
                 const sharedArtistsList = countryData.sharedArtists
                     .map(artist => `• ${artist}`)
                     .join('<br>');
                 
-                // Create the popup content
                 const popupContent = `
                     <div style="min-width: 200px">
                         <h3 style="margin: 0 0 8px 0">${countryName}</h3>
@@ -130,15 +93,26 @@ function updateChoropleth(worldData, similarityScores) {
     }).addTo(map);
 }
 
-// Update the event listener in the Promise.all section
+function getColor(similarity) {
+    const percentage = similarity * 100;
+    
+    return percentage >= 100 ? '#800026' :
+           percentage >= 80  ? '#BD0026' :
+           percentage >= 60  ? '#E31A1C' :
+           percentage >= 40  ? '#FC4E2A' :
+           percentage >= 20  ? '#FD8D3C' :
+                             '#FFEDA0';
+}
+
+// Load data and initialize map
 Promise.all([
     d3.json('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_0_countries.geojson'),
     d3.csv('https://raw.githubusercontent.com/manuelanzali/Project-3/refs/heads/main/Resources/top_artists_by_country.csv')
 ]).then(([worldData, artistData]) => {
-    // Process the artist data to calculate similarities
     const countries = [...new Set(artistData.map(d => d.Country))].sort();
-
-    // Populate the dropdown with converted country names
+    const similarities = calculateSimilarities(artistData);
+    
+    // Setup dropdown
     const select = document.getElementById('countrySelect');
     countries.forEach(countryCode => {
         const option = document.createElement('option');
@@ -147,29 +121,16 @@ Promise.all([
         select.appendChild(option);
     });
 
-    const similarities = calculateSimilarities(artistData);
-
-    // Update the map when a country is selected
+    // Setup event listener
     select.addEventListener('change', (event) => {
-        selectedCountry = event.target.value; // Update the selected country
+        selectedCountry = event.target.value;
         updateChoropleth(worldData, similarities[selectedCountry]);
     });
 
-    // Trigger initial selection
+    // Initialize with first country
     if (countries.length > 0) {
-        selectedCountry = countries[0]; // Set initial selected country
+        selectedCountry = countries[0];
         select.value = selectedCountry;
         select.dispatchEvent(new Event('change'));
     }
 });
-
-function getColor(similarity) {
-    const percentage = similarity * 100;
-    
-    return percentage >= 100 ? '#800026' : // 5/5 artists shared
-           percentage >= 80  ? '#BD0026' : // 4/5 artists shared
-           percentage >= 60  ? '#E31A1C' : // 3/5 artists shared
-           percentage >= 40  ? '#FC4E2A' : // 2/5 artists shared
-           percentage >= 20  ? '#FD8D3C' : // 1/5 artists shared
-                             '#FFEDA0';   // No shared artists
-}
